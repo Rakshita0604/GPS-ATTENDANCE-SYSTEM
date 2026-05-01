@@ -49,3 +49,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
   setting_value TEXT NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS admin_config (
+  id INT PRIMARY KEY DEFAULT 1,
+  office_latitude DECIMAL(10, 8),
+  office_longitude DECIMAL(11, 8),
+  allowed_radius INT DEFAULT 100
+);
+
+INSERT INTO admin_config (id, office_latitude, office_longitude, allowed_radius)
+VALUES (1, NULL, NULL, 100)
+ON DUPLICATE KEY UPDATE id=id;
+
+DESCRIBE attendance;
+
+
+ALTER TABLE attendance 
+  ADD COLUMN user_id INT AFTER employee_id,
+  ADD COLUMN check_out TIME AFTER check_in,
+  CHANGE COLUMN latitude latitude VARCHAR(50),
+  CHANGE COLUMN longitude longitude VARCHAR(50),
+  CHANGE COLUMN date attendance_date DATE;

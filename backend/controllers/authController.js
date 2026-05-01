@@ -1,71 +1,139 @@
 import bcrypt from "bcrypt";
 import db from "../config/db.js";
-
+import { generateToken } from "../middleware/auth.js";
 import {
   isValidEmail,
   isValidName,
   isValidPassword,
-  isValidPhone
+  isValidPhone,
 } from "../middleware/validation.js";
 
-// SIGNUP
-export const signup = async (req, res) => {
-  const { name, email, password, phone } = req.body;
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+  };
+}
 
-  if (!isValidName(name)) return res.status(400).send("Invalid name");
-  if (!isValidEmail(email)) return res.status(400).send("Invalid email");
-  if (!isValidPassword(password)) return res.status(400).send("Weak password");
-  if (!isValidPhone(phone)) return res.status(400).send("Invalid phone");
-
+export async function signup(req, res, next) {
   try {
+    const { name, email, password, phone = "", role = "employee" } = req.body;
+    const cleanRole = role === "admin" ? "admin" : "employee";
+
+    // Validate name
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+    if (!isValidName(name)) {
+      return res.status(400).json({ message: "Name must contain only letters and spaces" });
+    }
+
+    // Validate email
+    if (!email || email.trim().length === 0) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: "Please enter a valid email address" });
+    }
+
+    // Validate password
+    if (!password || password.length === 0) {
+      return res.status(400).json({ message: "Password is required" });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({
+        message: "Password must be at least 8 characters with: 1 uppercase letter, 1 number, and 1 special character (!@#$%^&*)",
+      });
+    }
+
+    // Validate phone if provided
+    if (phone && phone.length > 0 && !isValidPhone(phone)) {
+      return res.status(400).json({ message: "Phone must be 10 digits starting with 6-9" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
+    const [result] = await db.query(
+      "INSERT INTO users (name, email, password, phone, role) VALUES (?, ?, ?, ?, ?)",
+      [name.trim(), email.trim().toLowerCase(), hashedPassword, phone, cleanRole]
+    );
 
-    const query = `
-      INSERT INTO users (name, email, password, phone)
-      VALUES (?, ?, ?, ?)
-    `;
+    const user = {
+      id: result.insertId,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone,
+      role: cleanRole,
+    };
 
-    db.query(query, [name, email, hashedPassword, phone], (err) => {
-      if (err) return res.status(500).send(err);
+    if (cleanRole === "employee") {
+      await db.query(
+        `INSERT INTO employees (user_id, employee_code, name, email, phone, status)
+         VALUES (?, ?, ?, ?, ?, 'active')`,
+        [user.id, `EMP-${String(user.id).padStart(3, "0")}`, user.name, user.email, phone]
+      );
+    }
 
-      res.send({ message: "Signup successful" });
+    return res.status(201).json({
+      message: "Signup successful",
+      token: generateToken(user),
+      user: publicUser(user),
     });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Email already exists" });
+    }
 
-  } catch (err) {
-    res.status(500).send("Signup error");
+    console.error("[AUTH] Signup error:", error);
+    next(error);
   }
-};
+}
 
-// LOGIN
-export const login = (req, res) => {
-  const { email, password } = req.body;
+export async function login(req, res, next) {
+  try {
+    const { email, password } = req.body;
 
-  console.log("LOGIN TRY:", email, password);
+    // Validate email
+    if (!email || email.trim().length === 0) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: "Please enter a valid email address" });
+    }
 
-  const query = "SELECT * FROM users WHERE email = ?";
+    // Validate password
+    if (!password || password.length === 0) {
+      return res.status(400).json({ message: "Password is required" });
+    }
 
-  db.query(query, [email], async (err, result) => {
-    if (err) return res.status(500).send(err);
+    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
+      email.trim().toLowerCase(),
+    ]);
 
-    console.log("DB RESULT:", result);
+    if (rows.length === 0) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
 
-    if (result.length === 0) return res.status(400).send("User not found");
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
 
-    const user = result[0];
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
 
-    const match = await bcrypt.compare(password, user.password);
-
-    console.log("PASSWORD MATCH:", match);
-
-    if (!match) return res.status(400).send("Invalid password");
-
-    res.send({
+    return res.json({
       message: "Login successful",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email
-      }
+      token: generateToken(user),
+      user: publicUser(user),
     });
-  });
-};
+  } catch (error) {
+    console.error("[AUTH] Login error:", error);
+    next(error);
+  }
+}
+
+export function me(req, res) {
+  return res.json({ user: req.user });
+}

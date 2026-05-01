@@ -1,152 +1,131 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MapPin } from "lucide-react";
+import { toast } from "sonner";
 import { Button, Input } from "../components/UI";
-import { motion } from "motion/react";
-import { loginUser } from "../services/authService"; // ✅ ADD THIS
+import { loginUser, saveSession } from "../services/authService";
 
 export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+
+    // Validate input
+    if (!email.trim()) {
+      setError("Email is required");
+      return;
+    }
+    if (!password) {
+      setError("Password is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      const res = await loginUser({
-        email,
-        password,
-      });
-
-      console.log(res);
-
-      if (res.message === "Login successful") {
-        // ✅ store user in localStorage
-        localStorage.setItem("user", JSON.stringify(res.user));
-
-        alert("Login successful");
-
-        // ✅ redirect
-        navigate("/app/dashboard");
-      } else {
-        alert(res);
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Login failed");
+      console.log("[LOGIN] Attempting login for:", email);
+      const response = await loginUser({ email: email.trim(), password });
+      console.log("[LOGIN] Success, user role:", response.user.role);
+      
+      saveSession(response);
+      toast.success("Login successful");
+      
+      const redirectPath = response.user.role === "admin" ? "/app/admin-dashboard" : "/app/dashboard";
+      console.log("[LOGIN] Redirecting to:", redirectPath);
+      
+      navigate(redirectPath, { replace: true });
+    } catch (error: any) {
+      console.error("[LOGIN] Error:", error);
+      const errorMessage = error?.message || "Login failed";
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="flex min-h-screen">
-      {/* Left side - Illustration */}
-      <motion.div
-        className="hidden w-1/2 bg-slate-50 lg:block relative"
-        initial={{ opacity: 0, x: -50 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="absolute inset-0 bg-indigo-600/10 mix-blend-multiply" />
-        <div className="relative flex h-full items-center justify-center p-12">
-          <motion.div
-            className="max-w-md text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.6 }}
-          >
-            <motion.div
-              className="mb-8 flex justify-center"
-              animate={{
-                scale: [1, 1.05, 1],
-                rotate: [0, 5, -5, 0]
-              }}
-              transition={{
-                duration: 4,
-                repeat: Infinity,
-                repeatType: "reverse"
-              }}
-            >
-              <MapPin className="h-24 w-24 text-indigo-600" />
-            </motion.div>
-            <h1 className="mb-4 text-4xl font-bold text-slate-900">
-              Welcome to GeoTrack SaaS
-            </h1>
-            <p className="text-lg text-slate-600">
-              GPS-based attendance management system for modern enterprises.
-            </p>
-          </motion.div>
+      <div className="hidden w-1/2 bg-slate-50 lg:flex lg:items-center lg:justify-center lg:p-12">
+        <div className="max-w-md text-center">
+          <div className="mb-8 flex justify-center">
+            <MapPin className="h-24 w-24 text-indigo-600" />
+          </div>
+          <h1 className="mb-4 text-4xl font-bold text-slate-900">GeoTrack Attendance</h1>
+          <p className="text-lg text-slate-600">
+            GPS-based attendance with location verification and photo capture.
+          </p>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Right side - Login form */}
-      <motion.div
-        className="flex w-full items-center justify-center p-8 lg:w-1/2"
-        initial={{ opacity: 0, x: 50 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6 }}
-      >
+      <div className="flex w-full items-center justify-center bg-white p-8 lg:w-1/2">
         <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
-          <motion.div
-            className="flex flex-col gap-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white mb-4">
+          <div>
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <MapPin className="h-6 w-6" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Sign in to your account
-            </h1>
-            <p className="text-sm text-slate-500">
-              Enter your credentials to access your dashboard
-            </p>
-          </motion.div>
+            <h1 className="text-3xl font-bold text-slate-900">Sign in</h1>
+            <p className="mt-2 text-sm text-slate-500">Use your employee or admin account.</p>
+          </div>
 
-          <motion.form
-            onSubmit={handleLogin}
-            className="flex flex-col gap-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-          >
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="grid gap-4">
             <div className="grid gap-2">
-              <label className="text-sm font-medium text-slate-900">
-                Email
-              </label>
+              <label className="text-sm font-medium text-slate-900">Email</label>
               <Input
                 type="email"
                 placeholder="name@company.com"
-                required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (error) setError("");
+                }}
+                disabled={isSubmitting}
               />
             </div>
 
             <div className="grid gap-2">
-              <label className="text-sm font-medium text-slate-900">
-                Password
-              </label>
+              <label className="text-sm font-medium text-slate-900">Password</label>
               <Input
                 type="password"
-                placeholder="••••••••"
-                required
+                placeholder="Password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  if (error) setError("");
+                }}
+                disabled={isSubmitting}
               />
             </div>
 
-            <Button type="submit" className="w-full mt-2" size="lg">
-              Sign In
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Signing in..." : "Sign In"}
             </Button>
-          </motion.form>
+          </form>
 
-          <div className="text-center text-sm text-slate-500">
-            Need an account? Contact your HR administrator.
-          </div>
+          <p className="text-center text-sm text-slate-500">
+            New here?{" "}
+            <Link className="font-medium text-indigo-600 hover:underline" to="/signup">
+              Create an account
+            </Link>
+          </p>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

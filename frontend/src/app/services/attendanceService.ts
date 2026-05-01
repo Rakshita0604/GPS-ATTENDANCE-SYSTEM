@@ -1,21 +1,36 @@
-const BASE_URL = "http://localhost:5000/api";
+import { apiRequest } from "./api";
 
-// 🔥 MARK ATTENDANCE (FORM DATA)
-export const markAttendance = async (formData: FormData) => {
-  const res = await fetch(`${BASE_URL}/attendance/mark`, {
-    method: "POST",
-    body: formData, // ✅ no JSON
-  });
+export interface AttendanceRecord {
+  id: number;
+  user_id: number;
+  attendance_date: string;
+  check_in: string | null;
+  check_out: string | null;
+  image: string | null;
+  latitude: string;
+  longitude: string;
+  status: "present" | "late";
+  employee_code?: string;
+  name?: string;
+  email?: string;
+}
 
-  return res.json();
-};
+export function markAttendance(formData: FormData) {
+  return apiRequest<{ message: string }>("/attendance/mark", "POST", formData);
+}
 
-// 🔍 GET HISTORY
-export const getDashboardData = async (userId: number) => {
-  return apiRequest(`/attendance/dashboard/${userId}`, "GET");
-};
+export function getDashboardData() {
+  return apiRequest<any>("/attendance/dashboard", "GET");
+}
 
-// get attendance history
-export const getAttendanceHistory = async (userId: number) => {
-  return apiRequest(`/attendance?user_id=${userId}`, "GET");
-};
+export function getAttendanceHistory() {
+  return apiRequest<AttendanceRecord[]>("/attendance/history", "GET");
+}
+
+export function saveOfficeLocation(data: { lat: string; lng: string; radius: string }) {
+  return apiRequest<{ message: string }>("/admin/config", "PUT", data);
+}
+
+export function getOfficeLocation() {
+  return apiRequest<{ lat: string; lng: string; radius: string | number }>("/admin/config", "GET");
+}

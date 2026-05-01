@@ -1,13 +1,51 @@
-const BASE_URL = "http://localhost:5000/api";
+import axios, { AxiosError, AxiosRequestConfig } from "axios";
 
-export const apiRequest = async (endpoint: string, method: string, data?: any) => {
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+export const API_URL = "http://localhost:5000";
+
+const api = axios.create({
+  baseURL: API_URL,
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<{ message?: string }>) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
+
+    return Promise.reject(error.response?.data || error);
+  }
+);
+
+export async function apiRequest<T = any>(
+  url: string,
+  method: AxiosRequestConfig["method"] = "GET",
+  data?: any,
+  config: AxiosRequestConfig = {}
+): Promise<T> {
+  const response = await api.request<T>({
+    url,
     method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: data ? JSON.stringify(data) : undefined,
+    data,
+    ...config,
   });
 
-  return res.json();
-};
+  return response.data;
+}
+
+export default api;
